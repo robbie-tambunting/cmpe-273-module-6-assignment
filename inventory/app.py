@@ -1,8 +1,9 @@
 import json
+import os
 import socket
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-PORT = 8080
+PORT = int(os.environ.get("PORT", "8080"))
 
 # Per-process state: each Pod has its own copy of this.
 ready = True
@@ -19,33 +20,32 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/":
-            # TODO: respond 200 with JSON that includes this Pod's name.
-            #       Where does a container get its Pod name from? (see Q1 answer)
-            pass
+            self._send_json(200, {"status": "ok", "pod_name": socket.gethostname()})
         elif self.path == "/health":
-            # TODO: always 200 (liveness-style check)
-            pass
+            self._send_json(200, {"status": "ok"})
         elif self.path == "/ready":
-            # TODO: 200 if `ready` is True, otherwise 503
-            pass
+            # The kubelet's readiness probe only looks at the status code.
+            if ready:
+                self._send_json(200, {"ready": True})
+            else:
+                self._send_json(503, {"ready": False})
         else:
             self._send_json(404, {"error": "not found"})
 
     def do_POST(self):
         global ready
         if self.path == "/ready/fail":
-            # TODO: flip the flag so /ready starts failing, then respond
-            pass
+            ready = False
+            self._send_json(200, {"ready": ready, "pod_name": socket.gethostname()})
         elif self.path == "/ready/restore":
-            # TODO: flip it back, then respond
-            pass
+            ready = True
+            self._send_json(200, {"ready": ready, "pod_name": socket.gethostname()})
         else:
             self._send_json(404, {"error": "not found"})
 
 
 if __name__ == "__main__":
-    # TODO: which address must we bind to so the container is reachable
-    #       from outside itself? ("127.0.0.1" will NOT work in a container)
-    server = HTTPServer(("TODO", PORT), Handler)
+    # 0.0.0.0 = all interfaces; 127.0.0.1 would be unreachable from outside the container.
+    server = HTTPServer(("0.0.0.0", PORT), Handler)
     print(f"inventory listening on {PORT}", flush=True)
     server.serve_forever()
